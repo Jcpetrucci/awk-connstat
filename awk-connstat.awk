@@ -45,7 +45,6 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		# IP Protocol
 		connections[NR, "ipp"] = strtonum("0x" $6)
 	}
-#print connections["6" SUBSEP "dir"];
 }
 
 END {
