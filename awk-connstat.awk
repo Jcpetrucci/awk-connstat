@@ -1,4 +1,9 @@
 #!/usr/bin/awk -f
+function horizontalRule() {
+	"tput cols" | getline screenWidth
+	for (i = 1; i<= screenWidth; i++) printf "-"
+	printf "\n";
+}
 BEGIN {
 cols[1]="SRC IP"
 cols[2]="SRC PORT"
@@ -11,10 +16,7 @@ for (i = 1; i <= 6; i++) {
 	printf "%17.15s", cols[i];
 }
 printf "\n";
-"tput cols" | getline screenWidth
-for (i = 1; i<= screenWidth; i++) printf "-"
-printf "\n";
-
+horizontalRule()
 }
 
 $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
@@ -53,6 +55,5 @@ for (cindex in connectionIndex) {
 	}
 	printf "\n";
 }
-
-print "END"
+horizontalRule()
 }
