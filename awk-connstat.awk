@@ -40,7 +40,8 @@ function displayHeaders(){
 	cols[5]="IPP"
 	cols[6]="DIR"
 	cols[7]="STATE"
-	numCols=7
+	cols[8]="REMATCH"
+	numCols=8
 
 	for (i = 1; i <= numCols; i++) {
 		printf "%17.15s", cols[i];
@@ -129,8 +130,16 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		connections[NR, "ipp"] = strtonum("0x" $6)
 		# Connection state
 		connections[NR, "state"] = substr($7, 5, 2)
-		if (connections[NR, "state"] ~ /c/) connections[NR, "state"] = "ESTABLISHED" # Not sure on the parsing of connections table here.  Need to get clarificaiton / sk65133.
-		else connections[NR, "state"] = "SYN_SENT"
+		if (connections[NR, "state"] ~ /^8/) connections[NR, "state"] = "SYN-ACK" # Not sure on the parsing of connections table here.  Need to get clarificaiton / sk65133.
+		if (connections[NR, "state"] ~ /1./) connections[NR, "state"] = "SOURCE_FIN"
+		if (connections[NR, "state"] ~ /(2|e)./) connections[NR, "state"] = "DEST_FIN" 
+		if (connections[NR, "state"] ~ /^(4|c)/) connections[NR, "state"] = "ESTABLISHED" 
+		if (connections[NR, "state"] ~ /f./) connections[NR, "state"] = "CLOSED" 
+		if (connections[NR, "state"] ~ /00/) connections[NR, "state"] =  "SYN/NONE"
+		# Rematch properties
+		connections[NR, "rematch"] = substr($8, 6, 1)
+		if (connections[NR, "rematch"] == 8 ) connections[NR, "rematch"] = "NO" 
+		else connections[NR, "rematch"] = "YES"
 	}
 }
 $1 ~ /^dynamic/ { # Find header
