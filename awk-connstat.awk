@@ -52,7 +52,8 @@ function displayHeaders(){
 function summarizeConnections(topX) {
 	# Count total active connections.
 	for (i in connectionIndex) totalConnections++
-	printf "%s %d %s %s\n", "Concurrent connections:", totalConnections, "Limit:", connectionsLimit
+	if ( connectionsLimit + 1 > 2 ) if ( totalConnections > ( connectionsLimit * .75) ) totalConnections = totalConnections " (WARNING!)"
+	printf "%15s %s %15s %s\n", "Concurrent:", totalConnections, "Limit:", connectionsLimit
 
 	cmdSortSrcip = "sort -nrk3"
 	cmdSortDstip = "sort -n -rk3"
@@ -74,8 +75,8 @@ function summarizeConnections(topX) {
 	} 
 	close(cmdSortDstport, "to")
 
-	# Now glue them all together into parallel lists
-	printf "%30s%30s%30s\n", "Top Source IPs", "Top Destination IPs", "Top Services" 
+	# Now paste them all together into parallel columns.
+	printf "%"screenWidth / 4"s%"screenWidth / 4"s%"screenWidth / 4"s\n", "Top Source IPs", "Top Destination IPs", "Top Services" 
 	for (i=topX; i>=1; i--) {
 		result = (cmdSortSrcip |& getline lineSrcip)
 		if (result <= 0) lineSrcip = "---"
@@ -84,7 +85,7 @@ function summarizeConnections(topX) {
 		result = (cmdSortDstport |& getline lineDstport)
 		if (result <= 0) lineDstport = "---"
 
-		printf "%30s%30s%30s\n", lineSrcip, lineDstip, lineDstport
+		printf "%"screenWidth / 4"s%"screenWidth / 4"s%"screenWidth / 4"s\n", lineSrcip, lineDstip, lineDstport
 	}
 	
 }
