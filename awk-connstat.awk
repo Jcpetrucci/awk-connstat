@@ -50,23 +50,27 @@ function displayHeaders(){
 }
 
 function summarizeConnections(topX) {
-	cmdSortSrcip = "sort -nr"
-	cmdSortDstip = "sort -r"
-	cmdSortDstport = "sort -nr -k1"
+	# Count total active connections.
+	for (i in connectionIndex) totalConnections++
+	printf "%s %d %s %s\n", "Concurrent connections:", totalConnections, "Limit:", connectionsLimit
+
+	cmdSortSrcip = "sort -nrk3"
+	cmdSortDstip = "sort -n -rk3"
+	cmdSortDstport = "sort -nr -k3"
 	# They all have to be slightly different so we can refer to them uniquely for reading and writing.
 
 	for (count in counterSrcip) {
-		print counterSrcip[count] " - " count |& cmdSortSrcip
+		print count " ( " counterSrcip[count] " )" |& cmdSortSrcip
 	} 
 	close(cmdSortSrcip, "to")
 
 	for (count in counterDstip) {
-		print counterDstip[count] " - " count |& cmdSortDstip
+		print count " ( " counterDstip[count] " )" |& cmdSortDstip
 	} 
 	close(cmdSortDstip, "to")
 
 	for (count in counterDstport) {
-		print counterDstport[count] " - " count |& cmdSortDstport
+		print count " ( " counterDstport[count] " )" |& cmdSortDstport
 	} 
 	close(cmdSortDstport, "to")
 
@@ -123,9 +127,13 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		else connections[NR, "state"] = "SYN_SENT"
 	}
 }
+$1 !~ /<0000000(0|1)/ { # Find header
+	#connectionsLimit = gensub( /limit(..)/, "\1", "g", $0 )
+	if ( /limit/ ) connectionsLimit = $NF
+}
 
 END {
 displayConnections()
 #readInput()
-summarizeConnections(15)
+summarizeConnections(10)
 }
