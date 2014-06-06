@@ -22,9 +22,11 @@ function displayConnections(){
 
 function readInput(){
 	while (1) {
+		printf "%s\t%s\n", "COMMANDS:", "[Q]uit"
 		printf "%s", "Enter command: "
 		getline REPLY < "/dev/tty"
 		if (REPLY ~ /[qQ]/) break
+		if (REPLY ~ /[tT]/) summarizeConnections(3) 
 		displayHeaders()
 		displayConnections()
 	}
@@ -47,6 +49,42 @@ function displayHeaders(){
 	horizontalRule()
 }
 
+function summarizeConnections(topX) {
+	cmdSortSrcip = "sort -nr"
+	cmdSortDstip = "sort -r"
+	cmdSortDstport = "sort -nr -k1"
+	# They all have to be slightly different so we can refer to them uniquely for reading and writing.
+
+	for (count in counterSrcip) {
+		print counterSrcip[count] " - " count |& cmdSortSrcip
+	} 
+	close(cmdSortSrcip, "to")
+
+	for (count in counterDstip) {
+		print counterDstip[count] " - " count |& cmdSortDstip
+	} 
+	close(cmdSortDstip, "to")
+
+	for (count in counterDstport) {
+		print counterDstport[count] " - " count |& cmdSortDstport
+	} 
+	close(cmdSortDstport, "to")
+
+	# Now glue them all together into parallel lists
+	printf "%30s%30s%30s\n", "Top Source IPs", "Top Destination IPs", "Top Services" 
+	for (i=topX; i>=1; i--) {
+		result = (cmdSortSrcip |& getline lineSrcip)
+		if (result <= 0) lineSrcip = "---"
+		result = (cmdSortDstip |& getline lineDstip)
+		if (result <= 0) lineDstip = "---"
+		result = (cmdSortDstport |& getline lineDstport)
+		if (result <= 0) lineDstport = "---"
+
+		printf "%30s%30s%30s\n", lineSrcip, lineDstip, lineDstport
+	}
+	
+}
+
 BEGIN {
 displayHeaders()
 }
@@ -64,6 +102,7 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 			strtonum("0x" substr($2, 3, 2))"."\
 			strtonum("0x" substr($2, 5, 2))"."\
 			strtonum("0x" substr($2, 7, 2))
+		counterSrcip[connections[NR, "srcip"]]++
 		# Source port
 		connections[NR, "srcport"] = strtonum("0x" $3)
 		# Destination IP
@@ -72,8 +111,10 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 			strtonum("0x" substr($4, 3, 2))"."\
 			strtonum("0x" substr($4, 5, 2))"."\
 			strtonum("0x" substr($4, 7, 2))
+		counterDstip[connections[NR, "dstip"]]++
 		# Destination port
 		connections[NR, "dstport"] = strtonum("0x" $5)
+		counterDstport[connections[NR, "dstport"]]++
 		# IP protocol
 		connections[NR, "ipp"] = strtonum("0x" $6)
 		# Connection state
@@ -85,5 +126,6 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 
 END {
 displayConnections()
-readInput()
+#readInput()
+summarizeConnections(15)
 }
