@@ -52,8 +52,12 @@ function displayHeaders(){
 function summarizeConnections(topX) {
 	# Count total active connections.
 	for (i in connectionIndex) totalConnections++
-	if ( connectionsLimit + 1 > 2 ) if ( totalConnections > ( connectionsLimit * .75) ) totalConnections = totalConnections " (WARNING!)"
-	printf "%15s %s %15s %s\n", "Concurrent:", totalConnections, "Limit:", connectionsLimit
+	printf "%15s %'d", "Concurrent:", totalConnections
+	if ( connectionsLimit + 1 > 2 ) {
+		printf "%15s %'d", "Limit:", connectionsLimit
+		if ( totalConnections > ( connectionsLimit * .75) ) printf "%30s", " <-------- WARNING!"
+	} else printf "%15s %s", "Limit:", connectionsLimit
+	print ""
 
 	cmdSortSrcip = "sort -nrk3"
 	cmdSortDstip = "sort -n -rk3"
@@ -61,17 +65,17 @@ function summarizeConnections(topX) {
 	# They all have to be slightly different so we can refer to them uniquely for reading and writing.
 
 	for (count in counterSrcip) {
-		print count " ( " counterSrcip[count] " )" |& cmdSortSrcip
+		printf "%s ( %'d )\n", count, counterSrcip[count] |& cmdSortSrcip
 	} 
 	close(cmdSortSrcip, "to")
 
 	for (count in counterDstip) {
-		print count " ( " counterDstip[count] " )" |& cmdSortDstip
+		printf "%s ( %'d )\n", count, counterDstip[count] |& cmdSortDstip
 	} 
 	close(cmdSortDstip, "to")
 
 	for (count in counterDstport) {
-		print count " ( " counterDstport[count] " )" |& cmdSortDstport
+		printf "%s ( %'d )\n", count, counterDstport[count] |& cmdSortDstport
 	} 
 	close(cmdSortDstport, "to")
 
@@ -79,12 +83,13 @@ function summarizeConnections(topX) {
 	printf "%"screenWidth / 4"s%"screenWidth / 4"s%"screenWidth / 4"s\n", "Top Source IPs", "Top Destination IPs", "Top Services" 
 	for (i=topX; i>=1; i--) {
 		result = (cmdSortSrcip |& getline lineSrcip)
-		if (result <= 0) lineSrcip = "---"
+		if (result <= 0) lineSrcip = "---"; else 1 #visualSrcip = substr(
 		result = (cmdSortDstip |& getline lineDstip)
 		if (result <= 0) lineDstip = "---"
 		result = (cmdSortDstport |& getline lineDstport)
 		if (result <= 0) lineDstport = "---"
 
+		#LC_ALL="en_US.UTF-8"
 		printf "%"screenWidth / 4"s%"screenWidth / 4"s%"screenWidth / 4"s\n", lineSrcip, lineDstip, lineDstport
 	}
 	
@@ -93,7 +98,7 @@ function summarizeConnections(topX) {
 BEGIN {
 displayHeaders()
 }
-
+$1 ~ /\[fw_[0-9]+\]/ { $0 = gensub(/\[fw_[0-9]+\]/, "", "g", $0); } # Strip kernel IDs
 $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 	if (NF > 15) { # Find non-symlink connections
 		connectionIndex[NR] = "1"
@@ -128,9 +133,8 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		else connections[NR, "state"] = "SYN_SENT"
 	}
 }
-$1 !~ /<0000000(0|1)/ { # Find header
-	#connectionsLimit = gensub( /limit(..)/, "\1", "g", $0 )
-	if ( /limit/ ) connectionsLimit = $NF
+$1 ~ /^dynamic/ { # Find header
+	if ( /unlimited/ ) connectionsLimit = "Unlimited"; else connectionsLimit = strtonum(gensub( /.*limit ([0-9]+).*/, "\\1", "", $0))
 }
 
 END {
