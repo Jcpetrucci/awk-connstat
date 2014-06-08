@@ -10,6 +10,12 @@ function horizontalRule() {
 	printf "\n";
 }
 
+function ttyCheck() {
+	result = ("tty" | getline)
+	#if (result > 0) tty = "0"
+	return result
+}
+
 function displayConnections(){
 	for (cindex in connectionIndex) {
 		for (i = 1; i <= numCols; i++) {
@@ -17,7 +23,6 @@ function displayConnections(){
 		}
 		printf "\n";
 	}
-	horizontalRule()
 }
 
 function readInput(){
@@ -51,6 +56,7 @@ function displayHeaders(){
 }
 
 function summarizeConnections(topX) {
+	horizontalRule()
 	# Count total active connections.
 	for (i in connectionIndex) totalConnections++
 	printf "%15s %'d", "Concurrent:", totalConnections
@@ -63,6 +69,7 @@ function summarizeConnections(topX) {
 	cmdSortSrcip = "sort -nrk3"
 	cmdSortDstip = "sort -n -rk3"
 	cmdSortDstport = "sort -nr -k3"
+	cmdSortState= "sort -n -r -k3"
 	# They all have to be slightly different so we can refer to them uniquely for reading and writing.
 
 	for (count in counterSrcip) {
@@ -80,8 +87,14 @@ function summarizeConnections(topX) {
 	} 
 	close(cmdSortDstport, "to")
 
+	for (count in counterState) {
+		printf "%s ( %d%% )\n", count, (counterState[count] / totalConnections) * 100 |& cmdSortState
+	} 
+	close(cmdSortState, "to")
+
 	# Now paste them all together into parallel columns.
-	printf "%"screenWidth / 4"s%"screenWidth / 4"s%"screenWidth / 4"s\n", "Top Source IPs", "Top Destination IPs", "Top Services" 
+	summaryColWidth = int(strtonum(screenWidth / 5))
+	printf "%"summaryColWidth"s %"summaryColWidth"s %"summaryColWidth"s %"summaryColWidth"s\n", "Top Source IPs", "Top Destination IPs", "Top Services", "Connection States" 
 	for (i=topX; i>=1; i--) {
 		result = (cmdSortSrcip |& getline lineSrcip)
 		if (result <= 0) lineSrcip = "---"; else 1 #visualSrcip = substr(
@@ -89,9 +102,10 @@ function summarizeConnections(topX) {
 		if (result <= 0) lineDstip = "---"
 		result = (cmdSortDstport |& getline lineDstport)
 		if (result <= 0) lineDstport = "---"
+		result = (cmdSortState |& getline lineState)
+		if (result <= 0) lineState = "---"
 
-		#LC_ALL="en_US.UTF-8"
-		printf "%"screenWidth / 4"s%"screenWidth / 4"s%"screenWidth / 4"s\n", lineSrcip, lineDstip, lineDstport
+		printf "%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s\n", lineSrcip, lineDstip, lineDstport, lineState
 	}
 	
 }
@@ -136,10 +150,17 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		if (connections[NR, "state"] ~ /^(4|c)/) connections[NR, "state"] = "ESTABLISHED" 
 		if (connections[NR, "state"] ~ /f./) connections[NR, "state"] = "CLOSED" 
 		if (connections[NR, "state"] ~ /00/) connections[NR, "state"] =  "SYN/NONE"
+		counterState[connections[NR, "state"]]++
 		# Rematch properties
 		connections[NR, "rematch"] = substr($8, 6, 1)
 		if (connections[NR, "rematch"] == 8 ) connections[NR, "rematch"] = "NO" 
 		else connections[NR, "rematch"] = "YES"
+		
+		# Print this connection
+		for (i = 1; i <= numCols; i++) {
+			printf "%17.15s", connections[NR, gensub( / /, "", "g", tolower(cols[i]))];
+		}
+		printf "\n";
 	}
 }
 $1 ~ /^dynamic/ { # Find header
@@ -147,7 +168,6 @@ $1 ~ /^dynamic/ { # Find header
 }
 
 END {
-displayConnections()
-#readInput()
+#displayConnections() # Moved the printing of each connection to the instant it is read to eliminate the pause while connections were being scanned and no output appeared.
 summarizeConnections(10)
 }
