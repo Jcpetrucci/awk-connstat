@@ -12,7 +12,6 @@ function horizontalRule() {
 
 function ttyCheck() {
 	result = ("tty" | getline)
-	#if (result > 0) tty = "0"
 	return result
 }
 
@@ -46,10 +45,14 @@ function displayHeaders(){
 	cols[6]="DIR"
 	cols[7]="STATE"
 	cols[8]="REMATCH"
-	numCols=8
+	cols[9]="TIMEOUT"
+	numCols=9
+
+	connectionColWidths="17,12,17,12,5,6,13,9,9"
+	split(connectionColWidths, connectionColWidth, ",")
 
 	for (i = 1; i <= numCols; i++) {
-		printf "%17.15s", cols[i];
+		printf "%"connectionColWidth[i]"s", cols[i];
 	}
 	printf "\n";
 	horizontalRule()
@@ -64,7 +67,8 @@ function summarizeConnections(topX) {
 		printf "%15s %'d", "Limit:", connectionsLimit
 		if ( totalConnections > ( connectionsLimit * .75) ) printf "%30s", " <-------- WARNING!"
 	} else printf "%15s %s", "Limit:", connectionsLimit
-	print ""
+	printf "\n"
+	horizontalRule() 
 
 	cmdSortSrcip = "sort -nrk3"
 	cmdSortDstip = "sort -n -rk3"
@@ -107,18 +111,45 @@ function summarizeConnections(topX) {
 
 		printf "%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s\n", lineSrcip, lineDstip, lineDstport, lineState
 	}
+	# Close coprocesses
+	close(cmdSortSrcip)
+	close(cmdSortDstip)
+	close(cmdSortDstport)
+	close(cmdSortState)
+
+	horizontalRule() 
+
+	# Sort firewall worker / core distribution
+	cmdSortCores= "sort -n -r -k2"
+	for (core in counterCore) {
+		printf "fw_%s: %2d%%\n", core, ((counterCore[core] / totalConnections) * 100) |& cmdSortCores
+	}
+	close(cmdSortCores, "to")
 	
+	# Display firewall worker / core distribution
+	printf "%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s\n", "Worker Distribution", "x", "x", "x" 
+	for (core in counterCore) {
+		result = (cmdSortCores |& getline lineCore)
+		if (result <= 0) lineDstip = "---"
+		printf "%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s\n", lineCore, "x", "x", "x" 
+	}
 }
 
 BEGIN {
 displayHeaders()
 }
-$1 ~ /\[fw_[0-9]+\]/ { $0 = gensub(/\[fw_[0-9]+\]/, "", "g", $0); } # Strip kernel IDs
+$1 ~ /^\[fw_[0-9]+\]/ { # Strip kernel IDs
+	if (NF > 15) { # If non-symlink
+		core = gensub(/^\[fw_([0-9]+)\].*/, "\\1", "", $0); # Extract and save
+		counterCore[core]++ # Increment counter for this core
+	}
+	$0 = gensub(/^\[fw_[0-9]+\]/, "", "", $0); # Strip and shift
+} 
 $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 	if (NF > 15) { # Find non-symlink connections
 		connectionIndex[NR] = "1"
 		$0 = tolower($0)
-		$0 = gensub( /[^0-9a-f ]/, "", "g", $0 ); # Strip illegal characters
+		$0 = gensub( /[^0-9a-f \/]/, "", "g", $0 ); # Strip illegal characters
 		# Direction
 		$1 ~ /00000000/ ? connections[NR, "dir"] = "IN" : connections[NR, "dir"] = "OUT" # Determine direction
 		# Source IP
@@ -153,21 +184,22 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		counterState[connections[NR, "state"]]++
 		# Rematch properties
 		connections[NR, "rematch"] = substr($8, 6, 1)
-		if (connections[NR, "rematch"] == 8 ) connections[NR, "rematch"] = "NO" 
-		else connections[NR, "rematch"] = "YES"
+		if (connections[NR, "rematch"] >= 8 ) connections[NR, "rematch"] = "NO  " 
+		else connections[NR, "rematch"] = "YES  "
+		# Timeout
+		connections[NR, "timeout"] = sprintf("%'d", strtonum(gensub(/([0-9]+)\/>$/, "\\1", "", $NF)))
 		
 		# Print this connection
 		for (i = 1; i <= numCols; i++) {
-			printf "%17.15s", connections[NR, gensub( / /, "", "g", tolower(cols[i]))];
+			printf "%"connectionColWidth[i]"s", connections[NR, gensub( / /, "", "g", tolower(cols[i]))];
 		}
 		printf "\n";
 	}
 }
 $1 ~ /^dynamic/ { # Find header
-	if ( /unlimited/ ) connectionsLimit = "Unlimited"; else connectionsLimit = strtonum(gensub( /.*limit ([0-9]+).*/, "\\1", "", $0))
+	if ( /unlimited/ ) connectionsLimit = "Automatic"; else connectionsLimit = strtonum(gensub( /.*limit ([0-9]+).*/, "\\1", "", $0))
 }
 
 END {
-#displayConnections() # Moved the printing of each connection to the instant it is read to eliminate the pause while connections were being scanned and no output appeared.
 summarizeConnections(10)
 }
