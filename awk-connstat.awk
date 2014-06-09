@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 # Create: 2014-06-03 John C. Petrucci( http://johncpetrucci.com )
-# Modify: 2014-06-04 John C. Petrucci
+# Modify: 2014-06-09 John C. Petrucci
 # Purpose: Portable / easily readable output of Check Point connections table (fw tab -t connections).
 # Usage: fw tab -t connections -u | ./awk-connstat.awk
 #
@@ -67,6 +67,14 @@ function summarizeConnections(topX) {
 		printf "%15s %'d", "Limit:", connectionsLimit
 		if ( totalConnections > ( connectionsLimit * .75) ) printf "%30s", " <-------- WARNING!"
 	} else printf "%15s %s", "Limit:", connectionsLimit
+
+	# Visual bar to show connections capacity.
+	visualTotalConnections = strtonum((totalConnections / connectionsLimit) * 30 )
+	printf "%10s", "["
+	for (i = 0; i < visualTotalConnections; i++) printf "%s", "+" 
+	for (i = visualTotalConnections; i < 30; i++) printf "%s", "-" 
+	printf "%s", "]"
+
 	printf "\n"
 	horizontalRule() 
 
@@ -133,6 +141,9 @@ function summarizeConnections(topX) {
 		if (result <= 0) lineDstip = "---"
 		printf "%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s\n", lineCore, "x", "x", "x" 
 	}
+
+	# Close coprocess
+	close(cmdSortCores)
 }
 
 BEGIN {
