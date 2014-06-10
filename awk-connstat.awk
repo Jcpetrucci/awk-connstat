@@ -62,7 +62,7 @@ function displayHeaders(){
 	cols[10]="RULE"
 	numCols=10
 
-	connectionColWidths="17,12,17,12,5,6,13,9,9,6"
+	connectionColWidths="17,12,17,12,5,6,13,9,9,9"
 	split(connectionColWidths, connectionColWidth, ",")
 
 	for (i = 1; i <= numCols; i++) {
@@ -234,7 +234,8 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		# Timeout
 		connections[NR, "timeout"] = sprintf("%'d", strtonum(gensub(/([0-9]+)\/>$/, "\\1", "", $NF)))
 		# Rule matched 
-		connections[NR, "rule"] = strtonum("0x" $9) # TO FIX: Extremely high rule numbers for implied rules.
+		connections[NR, "rule"] = strtonum("0x" $9) 
+		connections[NR, "rule"] > 1000000 ? connections[NR, "rule"] = "IMPLIED" : 1 # Not documented, but seems that implied rules appear as > 1,000,000 in table.
 		counterRule[connections[NR, "rule"]]++
 		
 		# Print this connection (unless suppressed by argument)
