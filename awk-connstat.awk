@@ -4,6 +4,18 @@
 # Purpose: Portable / easily readable output of Check Point connections table (fw tab -t connections).
 # Usage: fw tab -t connections -u | ./awk-connstat.awk
 #
+
+function displayHelp() {
+	printf "%s\n", "awk-connstat.awk - Accepts a single Check Point connections table via pipe or file (as argument)."
+	printf "%s\t%s\n", "Usage:", "fw tab -t connections -u | ./awk-connstat.awk"
+	printf "%s\t%s\n\n", "Usage:", "./awk-connstat.awk [-v quiet=y] [-v summary=25] connectionstable.txt"
+	printf "%s\n", "Switches (those below) MUST preceed the filename if file is not stdin."
+	printf "%17s\t%s\n", "-v quiet=y", "Do not print individual connections"
+	printf "%17s\t%s\n", "-v summary=n", "Show summary / statistics for <n> rows"
+	hardStop=1
+	exit 0
+}
+
 function horizontalRule() {
 	"tput cols" | getline screenWidth
 	for (i = 1; i<= screenWidth; i++) printf "-"
@@ -46,9 +58,10 @@ function displayHeaders(){
 	cols[7]="STATE"
 	cols[8]="REMATCH"
 	cols[9]="TIMEOUT"
-	numCols=9
+	cols[10]="RULE"
+	numCols=10
 
-	connectionColWidths="17,12,17,12,5,6,13,9,9"
+	connectionColWidths="17,12,17,12,5,6,13,9,9,6"
 	split(connectionColWidths, connectionColWidth, ",")
 
 	for (i = 1; i <= numCols; i++) {
@@ -62,19 +75,20 @@ function summarizeConnections(topX) {
 	horizontalRule()
 	# Count total active connections.
 	for (i in connectionIndex) totalConnections++
+
+	# Capacity bar
 	printf "%15s %'d", "Concurrent:", totalConnections
-	if ( connectionsLimit + 1 > 2 ) {
+	if ( connectionsLimit + 1 > 2 ) { # Test if limit is numeric or string (automatic connection limit).
 		printf "%15s %'d", "Limit:", connectionsLimit
-		if ( totalConnections > ( connectionsLimit * .75) ) printf "%30s", " <-------- WARNING!"
+		if ( totalConnections > ( connectionsLimit * .75) ) printf "%30s", " <-------- WARNING!" # Helps draw attention for capacity issues.
+
+		# Visual bar to show connections capacity.
+		visualTotalConnections = strtonum((totalConnections / connectionsLimit) * 30 )
+		printf "%10s", "["
+		for (i = 0; i < visualTotalConnections; i++) printf "%s", "+" 
+		for (i = visualTotalConnections; i < 30; i++) printf "%s", "-" 
+		printf "%s", "]"
 	} else printf "%15s %s", "Limit:", connectionsLimit
-
-	# Visual bar to show connections capacity.
-	visualTotalConnections = strtonum((totalConnections / connectionsLimit) * 30 )
-	printf "%10s", "["
-	for (i = 0; i < visualTotalConnections; i++) printf "%s", "+" 
-	for (i = visualTotalConnections; i < 30; i++) printf "%s", "-" 
-	printf "%s", "]"
-
 	printf "\n"
 	horizontalRule() 
 
@@ -129,26 +143,44 @@ function summarizeConnections(topX) {
 
 	# Sort firewall worker / core distribution
 	cmdSortCores= "sort -n -r -k2"
+	cmdSortRules= "sort -nr -k3"
+
 	for (core in counterCore) {
 		printf "fw_%s: %2d%%\n", core, ((counterCore[core] / totalConnections) * 100) |& cmdSortCores
 	}
+	printf "---\n" |& cmdSortCores # Force the coproc open - hackish fallback if no fw_worker data found in input file
 	close(cmdSortCores, "to")
 	
+	for (count in counterRule) {
+		printf "%s ( %'d )\n", count, counterRule[count] |& cmdSortRules
+	}
+	close(cmdSortRules, "to")
+
 	# Display firewall worker / core distribution
-	printf "%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s\n", "Worker Distribution", "x", "x", "x" 
-	for (core in counterCore) {
+	printf "%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s\n", "Worker Distribution", "Top Rules", " ", " " 
+	for (i=topX; i>=1; i--) {
 		result = (cmdSortCores |& getline lineCore)
-		if (result <= 0) lineDstip = "---"
-		printf "%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s\n", lineCore, "x", "x", "x" 
+		if (result <= 0 ) lineCore= "---"
+		result = (cmdSortRules |& getline lineRule)
+		if (result <= 0 ) lineRule= "---"
+		printf "%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s%"summaryColWidth"s\n", lineCore, lineRule, " ", " " 
 	}
 
-	# Close coprocess
+	# Close coprocesses
 	close(cmdSortCores)
+	close(cmdSortRules)
 }
 
 BEGIN {
-displayHeaders()
+
+# Script argument handling:
+if (2 in ARGV) displayHelp() # Display help text and quit
+if (ARGV[1] ~ /help/) displayHelp()
+length(summary) < 1 ? topX = 10 : topX = summary # If user defines number of summary rows we use that value.  Default is 10
+if (substr(tolower(quiet), 1, 1) != "y") displayHeaders() # Unless quiet mode we will show column headers.
+
 }
+
 $1 ~ /^\[fw_[0-9]+\]/ { # Strip kernel IDs
 	if (NF > 15) { # If non-symlink
 		core = gensub(/^\[fw_([0-9]+)\].*/, "\\1", "", $0); # Extract and save
@@ -199,12 +231,17 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		else connections[NR, "rematch"] = "YES  "
 		# Timeout
 		connections[NR, "timeout"] = sprintf("%'d", strtonum(gensub(/([0-9]+)\/>$/, "\\1", "", $NF)))
+		# Rule matched 
+		connections[NR, "rule"] = strtonum("0x" $9) # TO FIX: Extremely high rule numbers for implied rules.
+		counterRule[connections[NR, "rule"]]++
 		
-		# Print this connection
-		for (i = 1; i <= numCols; i++) {
-			printf "%"connectionColWidth[i]"s", connections[NR, gensub( / /, "", "g", tolower(cols[i]))];
+		# Print this connection (unless suppressed by argument)
+		if (substr(tolower(quiet), 1, 1) != "y") {
+			for (i = 1; i <= numCols; i++) {
+				printf "%"connectionColWidth[i]"s", connections[NR, gensub( / /, "", "g", tolower(cols[i]))];
+			}
+			printf "\n";
 		}
-		printf "\n";
 	}
 }
 $1 ~ /^dynamic/ { # Find header
@@ -212,5 +249,5 @@ $1 ~ /^dynamic/ { # Find header
 }
 
 END {
-summarizeConnections(10)
+hardStop != 1 ? summarizeConnections(topX) : 1
 }
