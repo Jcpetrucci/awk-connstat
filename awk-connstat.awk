@@ -1,17 +1,18 @@
 #!/usr/bin/awk -f
 # Create: 2014-06-03 John C. Petrucci( http://johncpetrucci.com )
-# Modify: 2014-06-09 John C. Petrucci
+# Modify: 2014-06-10 John C. Petrucci
 # Purpose: Portable / easily readable output of Check Point connections table (fw tab -t connections).
-# Usage: fw tab -t connections -u | ./awk-connstat.awk
+# Usage: fw tab -t connections -u -v | ./awk-connstat.awk
 #
 
 function displayHelp() {
 	printf "%s\n", "awk-connstat.awk - Accepts a single Check Point connections table via pipe or file (as argument)."
-	printf "%s\t%s\n", "Usage:", "fw tab -t connections -u | ./awk-connstat.awk"
+	printf "%s\t%s\n", "Usage:", "fw tab -t connections -u -v | ./awk-connstat.awk"
 	printf "%s\t%s\n\n", "Usage:", "./awk-connstat.awk [-v quiet=y] [-v summary=25] connectionstable.txt"
 	printf "%s\n", "Switches (those below) MUST preceed the filename if file is not stdin."
 	printf "%17s\t%s\n", "-v quiet=y", "Do not print individual connections"
 	printf "%17s\t%s\n", "-v summary=n", "Show summary / statistics for <n> rows"
+	printf "%17s\t%s\n", "-v raw=y", "Print the raw connection after parsed data.  Useful for deleting individual connections with `fw tab -t connections -x -e <RAW>'."
 	hardStop=1
 	exit 0
 }
@@ -190,7 +191,8 @@ $1 ~ /^\[fw_[0-9]+\]/ { # Strip kernel IDs
 } 
 $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 	if (NF > 15) { # Find non-symlink connections
-		connectionIndex[NR] = "1"
+		connectionIndex[NR] = "1" # Used as a counter to reference matching connections.
+		originalConnection = $0 # Store the original line before manipulation.
 		$0 = tolower($0)
 		$0 = gensub( /[^0-9a-f \/]/, "", "g", $0 ); # Strip illegal characters
 		# Direction
@@ -240,6 +242,7 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 			for (i = 1; i <= numCols; i++) {
 				printf "%"connectionColWidth[i]"s", connections[NR, gensub( / /, "", "g", tolower(cols[i]))];
 			}
+			if (substr(tolower(raw), 1, 1) == "y") printf "\tRAW: %s", originalConnection # Print the raw connection.  Useful for deleting connections with `fw tab -x -e <raw connection>'
 			printf "\n";
 		}
 	}
