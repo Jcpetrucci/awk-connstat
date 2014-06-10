@@ -12,7 +12,8 @@ function displayHelp() {
 	printf "%s\n", "Switches (those below) MUST preceed the filename if file is not stdin."
 	printf "%17s\t%s\n", "-v quiet=y", "Do not print individual connections"
 	printf "%17s\t%s\n", "-v summary=n", "Show summary / statistics for <n> rows"
-	printf "%17s\t%s\n", "-v raw=y", "Print the raw connection after parsed data.  Useful for deleting individual connections with `fw tab -t connections -x -e <RAW>'."
+	printf "%17s\t%s\n", "-v raw=y", "Print the raw connection after parsed data."
+	printf "%17s\t%s\n", "-v eid=y", "Print the entry-ID after parsed data.  Useful for deleting individual connections with `fw tab -t connections -x -e <eid>'."
 	hardStop=1
 	exit 0
 }
@@ -237,13 +238,20 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		connections[NR, "rule"] = strtonum("0x" $9) 
 		connections[NR, "rule"] > 1000000 ? connections[NR, "rule"] = "IMPLIED" : 1 # Not documented, but seems that implied rules appear as > 1,000,000 in table.
 		counterRule[connections[NR, "rule"]]++
+		# Entry ID / 6-tuple (sk98799) - used for deleting a connection.
+		connections[NR, "eid"] = sprintf("%s,%s,%s,%s,%s,%s", $1, $2, $3, $4, $5, $6)
+		
 		
 		# Print this connection (unless suppressed by argument)
 		if (substr(tolower(quiet), 1, 1) != "y") {
 			for (i = 1; i <= numCols; i++) {
 				printf "%"connectionColWidth[i]"s", connections[NR, gensub( / /, "", "g", tolower(cols[i]))];
 			}
-			if (substr(tolower(raw), 1, 1) == "y") printf "\tRAW: %s", originalConnection # Print the raw connection.  Useful for deleting connections with `fw tab -x -e <raw connection>'
+			if (substr(tolower(raw), 1, 1) == "y") {
+				printf "\tRAW: %s", originalConnection # Print the raw connection.
+			} else if (substr(tolower(eid), 1, 1) == "y") {
+				printf "\tEID: %s", connections[NR, "eid"] # Print the entry-ID.  Useful for deleting connections with `fw tab -x -e <raw connection>'
+			}
 			printf "\n";
 		}
 	}
