@@ -12,7 +12,7 @@ function displayHelp() {
 	printf "%s\n", "Switches (those below) MUST preceed the filename if file is not stdin."
 	printf "%17s\t%s\n", "-v quiet=y", "Do not print individual connections"
 	printf "%17s\t%s\n", "-v summary=n", "Show summary / statistics for <n> rows"
-	printf "%17s\t%s\n", "-v raw=y", "Print the raw connection after parsed data."
+	printf "%17s\t%s\n", "-v raw=y", "Print the raw connection after parsed data.  Recommend piping to `less -S'."
 	printf "%17s\t%s\n", "-v eid=y", "Print the entry-ID after parsed data.  Useful for deleting individual connections with `fw tab -t connections -x -e <eid>'."
 	hardStop=1
 	exit 0
