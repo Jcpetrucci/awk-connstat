@@ -7,13 +7,14 @@
 
 function displayHelp() {
 	printf "%s\n", "awk-connstat.awk - Accepts a single Check Point connections table via pipe or file (as argument)."
-	printf "%s\t%s\n", "Usage:", "fw tab -t connections -u -v | ./awk-connstat.awk"
+	printf "%s\t%s\n", "Usage:", "fw tab -t connections -u -v | ./awk-connstat.awk [-v sort={rule|dstport}]"
 	printf "%s\t%s\n\n", "Usage:", "./awk-connstat.awk [-v quiet=y] [-v summary=25] connectionstable.txt"
 	printf "%s\n", "Switches (those below) MUST preceed the filename if file is not stdin."
-	printf "%17s\t%s\n", "-v quiet=y", "Do not print individual connections"
-	printf "%17s\t%s\n", "-v summary=n", "Show summary / statistics for <n> rows"
+	printf "%17s\t%s\n", "-v quiet=y", "Do not print individual connections."
+	printf "%17s\t%s\n", "-v summary=<NUM>", "Show summary / statistics for <NUM> rows."
+	printf "%17s\t%s\n", "-v sort=<COLUMN>", "Sort parsed connections by <COLUMN>."
 	printf "%17s\t%s\n", "-v raw=y", "Print the raw connection after parsed data.  Recommend piping to `less -S'."
-	printf "%17s\t%s\n", "-v eid=y", "Print the entry-ID after parsed data.  Useful for deleting individual connections with `fw tab -t connections -x -e <eid>'."
+	printf "%17s\t%s\n", "-v eid=y", "Print the entry-ID after parsed data.  Useful for deleting individual connections with `fw tab -t connections -x -e <EID>'."
 	hardStop=1
 	exit 0
 }
@@ -29,13 +30,41 @@ function ttyCheck() {
 	return result
 }
 
-function displayConnections(){
+function displayConnections() {
 	for (cindex in connectionIndex) {
 		for (i = 1; i <= numCols; i++) {
 			printf "%17.15s", connections[cindex SUBSEP gensub( / /, "", "g", tolower(cols[i]))];
 		}
 		printf "\n";
 	}
+}
+
+function sortConnections() {
+	for (i = 1; i <= numCols; i++) { # Iterate through column headers.
+		gensub(/ /, "", "g", tolower(sort)) ==  gensub(/ /, "", "g", tolower(cols[i])) ? sortIndex = i : 1 # If sort argument matches column header then save the index for later sorting.
+	}
+
+	if (length(sortIndex) < 1 ) {
+		printf "%s %s %s\n", "ERROR!  Column:", sort, "is is not valid."
+		hardStop=1
+		exit 1
+	}
+
+	cmdSortConnections = "sort -nk" sortIndex
+
+	for (cindex in connectionIndex) {
+		for (i = 1; i <= numCols; i++) {
+			printf "%"connectionColWidth[i]"s", connections[cindex SUBSEP gensub( / /, "", "g", tolower(cols[i]))] |& cmdSortConnections
+		}
+		printf "\n" |& cmdSortConnections
+	}
+	close(cmdSortConnections, "to")
+	
+	while ((cmdSortConnections |& getline line) > 0) {
+		printf "%s\n", line
+	}
+
+	close(cmdSortConnections)
 }
 
 function readInput(){
@@ -244,15 +273,17 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		
 		# Print this connection (unless suppressed by argument)
 		if (substr(tolower(quiet), 1, 1) != "y") {
-			for (i = 1; i <= numCols; i++) {
-				printf "%"connectionColWidth[i]"s", connections[NR, gensub( / /, "", "g", tolower(cols[i]))];
+			if(length(sort) < 1) {
+				for (i = 1; i <= numCols; i++) {
+					printf "%"connectionColWidth[i]"s", connections[NR, gensub( / /, "", "g", tolower(cols[i]))];
+				}
+				if (substr(tolower(raw), 1, 1) == "y") {
+					printf "\tRAW: %s", originalConnection # Print the raw connection.
+				} else if (substr(tolower(eid), 1, 1) == "y") {
+					printf "\tEID: %s", connections[NR, "eid"] # Print the entry-ID.  Useful for deleting connections with `fw tab -x -e <raw connection>'
+				}
+				printf "\n";
 			}
-			if (substr(tolower(raw), 1, 1) == "y") {
-				printf "\tRAW: %s", originalConnection # Print the raw connection.
-			} else if (substr(tolower(eid), 1, 1) == "y") {
-				printf "\tEID: %s", connections[NR, "eid"] # Print the entry-ID.  Useful for deleting connections with `fw tab -x -e <raw connection>'
-			}
-			printf "\n";
 		}
 	}
 }
@@ -261,5 +292,6 @@ $1 ~ /^dynamic/ { # Find header
 }
 
 END {
+if (substr(tolower(quiet), 1, 1) != "y" && length(sort) > 0) sortConnections() # If quiet is not enabled and sort is then print connections sorted.
 hardStop != 1 ? summarizeConnections(topX) : 1
 }
