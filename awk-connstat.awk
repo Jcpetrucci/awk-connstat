@@ -255,7 +255,7 @@ $1 ~ /<0000000(0|1)/ { # Find connections - ignore headers
 		if (connections[NR, "state"] ~ /(2|e)./) connections[NR, "state"] = "DEST_FIN" 
 		if (connections[NR, "state"] ~ /^(4|c)/) connections[NR, "state"] = "ESTABLISHED" 
 		if (connections[NR, "state"] ~ /f./) connections[NR, "state"] = "CLOSED" 
-		if (connections[NR, "state"] ~ /00/) connections[NR, "state"] =  "SYN/NONE"
+		if (connections[NR, "state"] ~ /(3|7|b|f|0)0/) connections[NR, "state"] =  "SYN/NONE"
 		counterState[connections[NR, "state"]]++
 		# Rematch properties
 		connections[NR, "rematch"] = substr($8, 6, 1)
