@@ -15,6 +15,7 @@ function displayHelp() {
 	printf "%17s\t%s\n", "-v sort=<COLUMN>", "Sort parsed connections by <COLUMN>."
 	printf "%17s\t%s\n", "-v raw=y", "Print the raw connection after parsed data.  Recommend piping to `less -S'."
 	printf "%17s\t%s\n", "-v eid=y", "Print the entry-ID after parsed data.  Useful for deleting individual connections with `fw tab -t connections -x -e <EID>'."
+	printf "%17s\t%s\n", "-v nice=no", "Force run on a Firewall-1 system without requiring a positive niceness."
 	hardStop=1
 	exit 0
 }
