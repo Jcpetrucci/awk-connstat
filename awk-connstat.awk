@@ -213,11 +213,11 @@ function summarizeConnections(topX) {
 }
 
 BEGIN {
-niceCheck() # Attempts to prevent excessive CPU load of a firewall which is passing traffic.
-
 # Script argument handling:
 if (2 in ARGV) displayHelp() # Display help text and quit
 if (ARGV[1] ~ /help/) displayHelp()
+niceCheck() # Attempts to prevent excessive CPU load of a firewall which is passing traffic.
+
 length(summary) < 1 ? topX = 10 : topX = summary # If user defines number of summary rows we use that value.  Default is 10
 if (substr(tolower(quiet), 1, 1) != "y") displayHeaders() # Unless quiet mode we will show column headers.
 
