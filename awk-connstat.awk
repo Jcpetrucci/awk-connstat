@@ -25,6 +25,16 @@ function horizontalRule() {
 	printf "\n";
 }
 
+function niceCheck() {
+	isFirewall = system("fw stat >/dev/null 2>&1")
+	"ps -o nice $$ | tail -1" | getline niceness
+	if ((isFirewall == 0) && (niceness <10) && (nice != "no")){
+		printf "It appears this script is running directly on a firewall.  Please re-run with `nice' or `-v nice=no'.\n"
+		hardStop=1
+		exit 1
+	}
+}
+
 function ttyCheck() {
 	result = ("tty" | getline)
 	return result
@@ -203,6 +213,7 @@ function summarizeConnections(topX) {
 }
 
 BEGIN {
+niceCheck() # Attempts to prevent excessive CPU load of a firewall which is passing traffic.
 
 # Script argument handling:
 if (2 in ARGV) displayHelp() # Display help text and quit
