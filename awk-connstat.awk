@@ -1,6 +1,5 @@
 #!/usr/bin/awk -f
 # Create: 2014-06-03 John C. Petrucci( http://johncpetrucci.com )
-# Modify: 2014-06-10 John C. Petrucci
 # Purpose: Portable / easily readable output of Check Point connections table (fw tab -t connections).
 # Usage: fw tab -t connections -u -v | ./awk-connstat.awk
 #
